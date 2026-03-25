@@ -1,10 +1,10 @@
 module.exports = {
-  displayName: 'src',
+  displayName: 'ocr-worker',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
   transform: {
     '^.+\\.[tj]s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
-  coverageDirectory: '../../coverage/apps/src',
+  coverageDirectory: '../../coverage/apps/ocr-worker',
 };

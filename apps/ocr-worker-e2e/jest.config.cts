@@ -1,5 +1,5 @@
 export default {
-  displayName: 'src-e2e',
+  displayName: 'ocr-worker-e2e',
   preset: '../../jest.preset.js',
   globalSetup: '<rootDir>/src/support/global-setup.ts',
   globalTeardown: '<rootDir>/src/support/global-teardown.ts',
@@ -14,5 +14,5 @@ export default {
     ],
   },
   moduleFileExtensions: ['ts', 'js', 'html'],
-  coverageDirectory: '../../coverage/src-e2e',
+  coverageDirectory: '../../coverage/ocr-worker-e2e',
 };
