@@ -14,7 +14,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       throw new Error('Critical: DATABASE_URL is missing');
     }
     const pool = new Pool({ connectionString });
-    const adapter = new PrismaPg(pool);
+    const adapter = new PrismaPg(pool as any);
     super({adapter});
   }
   async onModuleInit() {
