@@ -2,12 +2,17 @@ import {ConflictException, Injectable} from '@nestjs/common';
 import {PrismaService} from "@src/prisma";
 import {RegisterDto} from "@src/dto";
 import * as bcrypt from 'bcrypt';
+import {InjectPinoLogger, PinoLogger} from "nestjs-pino";
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
+    private readonly prisma: PrismaService
+  ) {}
 
   async register(dto: RegisterDto) {
+    this.logger.info({ email: dto.email }, 'Attempting to register new user');
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     })

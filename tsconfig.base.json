@@ -18,7 +18,8 @@
       "@src/dto": ["libs/shared/dto/src/index.ts"],
       "@src/prisma": ["libs/infra/prisma/src/index.ts"],
       "@src/storage": ["libs/infra/storage/src/index.ts"],
-      "@src/pipes": ["libs/shared/pipes/src/index.ts"]
+      "@src/pipes": ["libs/shared/pipes/src/index.ts"],
+      "@src/logger": ["libs/infra/logger/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
