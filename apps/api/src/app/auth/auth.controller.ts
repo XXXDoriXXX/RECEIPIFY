@@ -1,10 +1,18 @@
-import {Body, Controller, Post, UsePipes} from '@nestjs/common';
+import {Body, Controller, Get, Post, UseGuards, UsePipes} from '@nestjs/common';
 import {AuthService} from "./auth.service";
 import {LoginDto, LoginSchema, RegisterDto, RegisterSchema} from "@src/dto";
 import { ZodValidationPipe } from '@src/pipes';
+import {JwtAuthGuard} from "@src/guards";
+import {CurrentUser} from "@src/decorators";
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async getProfile(@CurrentUser() user: {id:string, email: string}){
+    return user
+  }
 
   @Post('register')
   @UsePipes(new ZodValidationPipe(RegisterSchema))
