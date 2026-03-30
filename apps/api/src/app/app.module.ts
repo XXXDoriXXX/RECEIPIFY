@@ -8,20 +8,19 @@ import { LoggerModule } from '@src/logger';
 import { StorageModule } from '@src/storage';
 import {ReceiptModule} from "./receipts/receipt.module";
 import {BullModule} from "@nestjs/bullmq";
-import {async} from "rxjs";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      inject: [ConfigModule],
-      useFactory: async (configService: ConfigService)=> ({
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => ({
         connection: {
-          host: configService.get<string>('REDIS_HOST','localhost'),
-          port: configService.get<number>('REDIS_PORT',6379),
-        }
-      })
+          host: configService.get<string>('REDIS_HOST', 'localhost'),
+          port: configService.get<number>('REDIS_PORT', 6379),
+        },
+      }),
     }),
     PrismaModule,
     AuthModule,
