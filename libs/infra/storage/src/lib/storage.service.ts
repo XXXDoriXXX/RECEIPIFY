@@ -1,20 +1,16 @@
-
 import 'multer';
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as Minio from 'minio';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 @Injectable()
 export class StorageService implements OnModuleInit {
+  private readonly logger = new Logger(StorageService.name);
   private readonly minioClient: Minio.Client;
   private readonly bucketName: string;
 
-  constructor(
-    @InjectPinoLogger(StorageService.name) private readonly logger: PinoLogger,
-    private readonly configService: ConfigService
-  ) {
+  constructor(private readonly configService: ConfigService) {
     this.bucketName = this.configService.get<string>('MINIO_BUCKET_NAME', 'fallback_bucket');
     this.minioClient = new Minio.Client({
       endPoint: this.configService.get<string>('MINIO_ENDPOINT', 'localhost'),
@@ -26,15 +22,15 @@ export class StorageService implements OnModuleInit {
   }
 
   async onModuleInit() {
-    this.logger.info({ bucketName: this.bucketName }, 'Checking MinIO bucket existence');
+    this.logger.log(`Checking MinIO bucket existence: ${this.bucketName}`);
     try {
       const exists = await this.minioClient.bucketExists(this.bucketName);
       if (!exists) {
         await this.minioClient.makeBucket(this.bucketName, 'eu-central-1');
-        this.logger.info({ bucketName: this.bucketName }, 'Created new MinIO bucket');
+        this.logger.log(`Created new MinIO bucket: ${this.bucketName}`);
       }
     } catch (e) {
-      this.logger.error({ err: e, bucketName: this.bucketName }, 'Failed to initialize MinIO bucket');
+      this.logger.error(`Failed to initialize MinIO bucket: ${this.bucketName}`, e);
       throw e;
     }
   }
@@ -51,7 +47,7 @@ export class StorageService implements OnModuleInit {
       { 'Content-Type': file.mimetype }
     );
 
-    this.logger.info({ storageKey, size: file.size }, 'File uploaded to MinIO successfully');
+    this.logger.log(`File uploaded to MinIO successfully: ${storageKey} (${file.size} bytes)`);
 
     return storageKey;
   }
