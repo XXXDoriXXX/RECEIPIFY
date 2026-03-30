@@ -51,4 +51,13 @@ export class StorageService implements OnModuleInit {
 
     return storageKey;
   }
+  async getFileBuffer(storageKey: string): Promise<Buffer> {
+    const dataStream = await this.minioClient.getObject(this.bucketName, storageKey);
+    const chunks: Buffer[] = [];
+    return new Promise((resolve, reject) => {
+      dataStream.on('data',(chunk)=>chunks.push(chunk));
+      dataStream.on('end',() => resolve(Buffer.concat(chunks)));
+      dataStream.on('error',(err)=>reject(err));
+    })
+  }
 }
