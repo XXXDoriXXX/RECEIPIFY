@@ -1,13 +1,17 @@
-import {Injectable, InternalServerErrorException, Logger} from "@nestjs/common";
-import {OcrParsedResult} from "./interfaces/ocr-job.interface";
-import {ImageAnnotatorClient} from "@google-cloud/vision";
+
+import { Injectable, InternalServerErrorException, Logger } from "@nestjs/common";
+import { SmartReceiptResult } from "./interfaces/smart-receipt.interface";
+import { ImageAnnotatorClient } from "@google-cloud/vision";
+import { ReceiptParserService } from "./receipt-parser.service";
 
 @Injectable()
 export class VisionService {
   private readonly logger = new Logger(VisionService.name);
   private readonly client = new ImageAnnotatorClient();
 
-  async extractText(imageBuffer: Buffer): Promise<OcrParsedResult> {
+  constructor(private readonly parserService: ReceiptParserService) {}
+
+  async extractText(imageBuffer: Buffer): Promise<SmartReceiptResult> {
     this.logger.log(`Sending image (${imageBuffer.length} bytes) to Google Vision API...`);
     try {
       const [result] = await this.client.documentTextDetection(imageBuffer);
@@ -16,21 +20,16 @@ export class VisionService {
         throw new Error('Google Vision returned no text.');
       }
 
-      this.logger.log('Successfully extracted raw text from Google Vision.');
-      return this.parseRawText(rawText);
+      this.logger.log('Successfully extracted raw text. Delegating to AI Parser...');
+
+      const parsedData = await this.parserService.parse(rawText);
+      parsedData.rawText = rawText;
+
+      return parsedData;
 
     } catch (e) {
       this.logger.error('Google Vision API failed', e.stack);
       throw new InternalServerErrorException('Failed to process image with AI');
     }
-  }
-  private parseRawText(rawText: string): OcrParsedResult {
-    // TODO:we will build a smart parser here to find the Merchant, Total, and Date  from the chaotic raw text string
-    return {
-      merchantName: 'Unknown Merchant',
-      totalAmount: 0,
-      date: new Date(),
-      rawText: rawText,
-    };
   }
 }
