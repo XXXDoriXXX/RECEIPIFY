@@ -1,21 +1,26 @@
+import { z } from 'zod';
 
-export interface SmartReceiptResult {
-  merchant: {
-    name: string;
-    address: string | null;
-    city: string | null;
-    country_code: string | null;
-  };
-  receipt: {
-    totalAmount: number;
-    currencyCode: string;
-    purchaseDate: string;
-  };
-  items: Array<{
-    name: string;
-    amount: number;
-    quantity: number;
-    suggestedCategory: 'Groceries' | 'Electronics' | 'Restaurant' | 'Transport' | 'Other';
-  }>;
-  rawText?: string;
-}
+export const SmartReceiptSchema = z.object({
+  merchant: z.object({
+    name: z.string(),
+    address: z.string().nullable(),
+    city: z.string().nullable(),
+    country_code: z.string().nullable(),
+  }),
+  receipt: z.object({
+    totalAmount: z.number(),
+    currencyCode: z.string(),
+    purchaseDate: z.string(),
+  }),
+  items: z.array(
+    z.object({
+      name: z.string(),
+      amount: z.number(),
+      quantity: z.number(),
+      suggestedCategory: z.enum(['Groceries', 'Electronics', 'Restaurant', 'Transport', 'Other']),
+    })
+  ),
+  rawText: z.string().optional(),
+});
+
+export type SmartReceiptResult = z.infer<typeof SmartReceiptSchema>;

@@ -24,17 +24,29 @@ export class OcrProcessor extends WorkerHost {
     this.logger.log(`[Job ${job.id}] Started processing receipt: ${receiptId}`);
 
     try {
+      this.logger.debug(`[Job ${job.id}] Updating receipt status to processing...`);
       await this.prisma.receipt.update({
         where: { id: receiptId },
         data: { status: 'processing' }
       });
 
+      this.logger.debug(`[Job ${job.id}] Fetching image buffer from MinIO for key: ${storageKey}`);
       const imageBuffer = await this.storageService.getFileBuffer(storageKey);
+
+      this.logger.debug(`[Job ${job.id}] Passing ${imageBuffer.length} bytes to vision extraction...`);
       const parsedData = await this.visionService.extractText(imageBuffer);
 
+      this.logger.debug(`[Job ${job.id}] Starting transactional DB persistence...`);
       await this.prisma.$transaction(async (tx) => {
         // 1 fetch the original receipt
         const receiptRecord = await tx.receipt.findUnique({ where: { id: receiptId } });
+        if (!receiptRecord) {
+          throw new Error(`Receipt ${receiptId} not found in DB`);
+        }
+
+        // clear any existing expense items in case this is a job retry
+        this.logger.debug(`[Job ${job.id}] Idempotency check: Clearing prior expense items for receipt ${receiptId}`);
+        await tx.expenseItem.deleteMany({ where: { receiptId: receiptId } });
 
         // 2 find or create merchant
         const merchantName = parsedData.merchant.name || 'Unknown Merchant';

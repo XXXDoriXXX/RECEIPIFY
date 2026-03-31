@@ -39,13 +39,24 @@ export class StorageService implements OnModuleInit {
     const extension = file.originalname.split('.').pop();
     const storageKey = `receipts/${userId}/${uuidv4()}.${extension}`;
 
-    await this.minioClient.putObject(
-      this.bucketName,
-      storageKey,
-      file.buffer,
-      file.size,
-      { 'Content-Type': file.mimetype }
-    );
+    if (file.path) {
+      this.logger.debug(`Streaming file from disk to MinIO: ${file.path}`);
+      await this.minioClient.fPutObject(
+        this.bucketName,
+        storageKey,
+        file.path,
+        { 'Content-Type': file.mimetype }
+      );
+    } else {
+      this.logger.debug(`Uploading file out of memory to MinIO: ${file.size} bytes`);
+      await this.minioClient.putObject(
+        this.bucketName,
+        storageKey,
+        file.buffer,
+        file.size,
+        { 'Content-Type': file.mimetype }
+      );
+    }
 
     this.logger.log(`File uploaded to MinIO successfully: ${storageKey} (${file.size} bytes)`);
 

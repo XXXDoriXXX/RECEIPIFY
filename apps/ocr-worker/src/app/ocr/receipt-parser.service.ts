@@ -2,7 +2,7 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenAI } from '@google/genai';
-import { SmartReceiptResult } from './interfaces/smart-receipt.interface';
+import { SmartReceiptResult, SmartReceiptSchema } from './interfaces/smart-receipt.interface';
 import { RECEIPT_EXTRACTION_PROMPT } from './prompts/receipt-extraction.prompt';
 
 @Injectable()
@@ -36,13 +36,23 @@ export class ReceiptParserService {
         throw new Error('LLM returned an empty response');
       }
 
-      const structuredData: SmartReceiptResult = JSON.parse(jsonString);
+      this.logger.debug('Parsing JSON string from LLM...');
+      let parsedJson;
+      try {
+        parsedJson = JSON.parse(jsonString);
+      } catch (parseError) {
+        this.logger.error('LLM output was not valid JSON', parseError.stack);
+        throw parseError;
+      }
 
-      this.logger.log(`LLM extracted ${structuredData.items.length} expense items.`);
+      this.logger.debug('Validating extracted data against strict Zod schema...');
+      const structuredData: SmartReceiptResult = SmartReceiptSchema.parse(parsedJson);
+
+      this.logger.log(`LLM extracted ${structuredData.items.length} expense items successfully.`);
       return structuredData;
 
     } catch (error) {
-      this.logger.error('Failed to parse text via LLM', error.stack);
+      this.logger.error(`Failed to parse text via LLM: ${error.message}`, error.stack);
       throw new InternalServerErrorException('AI Parsing Engine Failure');
     }
   }
