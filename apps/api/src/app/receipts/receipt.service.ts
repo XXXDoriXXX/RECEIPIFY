@@ -48,6 +48,14 @@ export class ReceiptService {
         receiptId:receipt.id,
         imageId:receipt.images[0].id,
         storageKey:storageKey,
+      }, {
+        attempts: 5,
+        backoff: {
+          type: 'exponential',
+          delay: 10000, // 10s base delay
+        },
+        removeOnComplete: true,
+        removeOnFail: false,
       })
       this.logger.log(`Successfully enqueued OCR job for receipt: ${receipt.id}`);
 

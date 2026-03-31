@@ -122,12 +122,22 @@ export class OcrProcessor extends WorkerHost {
       this.logger.log(`[Job ${job.id}] Completed successfully. Inserted ${parsedData.items.length} items for receipt: ${receiptId}`);
 
     } catch (e) {
-      this.logger.error(`[Job ${job.id}] Processing failed`, e.stack);
-      await this.prisma.receipt.update({
-        where: { id: receiptId },
-        data: { status: 'failed' },
-      });
+      const attemptsMade = job.attemptsMade;
+      const maxAttempts = job.opts.attempts || 1;
+
+      this.logger.error(`[Job ${job.id}] Processing failure (Attempt ${attemptsMade}/${maxAttempts}): ${e.message}`, e.stack);
+
+      if (attemptsMade >= maxAttempts) {
+        this.logger.error(`[Job ${job.id}] Terminal failure on last attempt. Marking receipt ${receiptId} as failed.`);
+        await this.prisma.receipt.update({
+          where: { id: receiptId },
+          data: { status: 'failed' },
+        });
+      } else {
+        this.logger.warn(`[Job ${job.id}] AI call failed or demand spike. Will retry via exponential backoff (Attempt ${attemptsMade}/${maxAttempts})...`);
+      }
       throw e;
     }
   }
 }
+

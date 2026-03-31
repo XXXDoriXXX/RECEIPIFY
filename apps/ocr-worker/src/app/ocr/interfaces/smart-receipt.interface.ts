@@ -17,7 +17,7 @@ export const SmartReceiptSchema = z.object({
       name: z.string(),
       amount: z.number(),
       quantity: z.number(),
-      suggestedCategory: z.enum(['Groceries', 'Electronics', 'Restaurant', 'Transport', 'Other']),
+      suggestedCategory: z.enum(['Groceries', 'Electronics', 'Restaurant', 'Transport', 'Other']).catch('Other'),
     })
   ),
   rawText: z.string().optional(),
