@@ -1,16 +1,17 @@
 import {
   Body,
   Controller, Delete, FileTypeValidator, Get,
+  HttpCode, HttpStatus,
   MaxFileSizeValidator, Param,
   ParseFilePipe, Patch,
   Post, Query,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors
 } from '@nestjs/common';
 import { JwtAuthGuard } from "@src/guards";
 import { ReceiptService } from "./receipt.service";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { FilesInterceptor } from "@nestjs/platform-express";
 import { diskStorage } from "multer";
 import * as os from "os";
 import { CurrentUser } from "@src/decorators";
@@ -27,7 +28,8 @@ export class ReceiptController {
   constructor(private readonly receiptService: ReceiptService) {}
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('receiptImage', {
+  @HttpCode(HttpStatus.ACCEPTED)
+  @UseInterceptors(FilesInterceptor('receiptImages', 20, {
     storage: diskStorage({
       destination: os.tmpdir(),
       filename: (req, file, cb) => {
@@ -36,18 +38,18 @@ export class ReceiptController {
       }
     })
   }))
-  async uploadReceipt(
-    @CurrentUser('id') userid: string,
-    @UploadedFile(
+  async uploadReceipts(
+    @CurrentUser('id') userId: string,
+    @UploadedFiles(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 1024 * 1024 * 5 }),
+          new MaxFileSizeValidator({ maxSize: 1024 * 1024 * 5 }),          // 5 MB
           new FileTypeValidator({ fileType: /(jpg|jpeg|png)$/, skipMagicNumbersValidation: true }),
         ],
       })
-    ) file: Express.Multer.File
+    ) files: Express.Multer.File[]
   ) {
-    return this.receiptService.processUpload(file, userid);
+    return this.receiptService.processUpload(files, userId);
   }
 
   @Post()

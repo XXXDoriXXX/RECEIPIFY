@@ -13,10 +13,10 @@ import { VisionService } from './vision.service';
     BullModule.registerQueue({
       name: 'ocr-jobs',
       defaultJobOptions: {
-        attempts: 3,
+        attempts: 5,
         backoff: {
           type: 'exponential',
-          delay: 3000, // 3s 6s 12s
+          delay: 10_000, // 10 20 40 80 160s
         },
         removeOnComplete: { count: 500 },
         removeOnFail: { count: 100 },

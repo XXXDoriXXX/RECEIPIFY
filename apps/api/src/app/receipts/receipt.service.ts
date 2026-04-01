@@ -15,63 +15,68 @@ export class ReceiptService {
     @InjectQueue('ocr-jobs') private readonly ocrQueue: Queue
   ) {}
 
-  async processUpload(file:Express.Multer.File, userId:string) {
-    this.logger.log(`Processing receipt upload: ${userId}, file: ${file.originalname}`);
-    try {
-      this.logger.debug(`Starting storage upload for ${file.originalname}`);
-      //upload s3
-      const storageKey = await this.storageService.uploadFile(file, userId);
-      this.logger.debug(`Storage upload complete: ${storageKey}. Creating DB record...`);
-      
-      //create DB record
-      const receipt = await this.prisma.receipt.create({
-        data: {
-          userId: userId,
-          totalAmount: 0,
-          currencyCode: 'USD',
-          purchaseDate: new Date(),
-          images: {
-            create: {
-              storageKey: storageKey,
-              mimeType: file.mimetype,
-              fileSizeBytes: file.size,
-            }
-          }
-        },
-        include: {
-          images: true,
-        }
-      });
-      this.logger.log(`Receipt and image records created successfully: ${receipt.id}`);
-      //enqueue ocr job
-      await this.ocrQueue.add('process-receipt', {
-        receiptId:receipt.id,
-        imageId:receipt.images[0].id,
-        storageKey:storageKey,
-      }, {
-        attempts: 5,
-        backoff: {
-          type: 'exponential',
-          delay: 10000, // 10s base delay
-        },
-        removeOnComplete: true,
-        removeOnFail: false,
-      })
-      this.logger.log(`Successfully enqueued OCR job for receipt: ${receipt.id}`);
+  async processUpload(files: Express.Multer.File[], userId: string) {
+    this.logger.log(`Processing batch upload: userId=${userId}, files=${files.length}`);
 
-      return {
-        message: 'Receipt uploaded successfully. OCR processing pending.',
-        receiptId: receipt.id,
-        imageId: receipt.images[0].id,
-      };
-    } finally {
+    // 1 parallel upload to storage
+    const uploaded = await Promise.all(
+      files.map(async (file) => {
+        const storageKey = await this.storageService.uploadFile(file, userId);
+        return { file, storageKey };
+      })
+    );
+    this.logger.debug(`Uploaded ${uploaded.length} files to storage`);
+
+    // 2 creating receipts in one transaction
+    const receipts = await this.prisma.$transaction(
+      uploaded.map(({ file, storageKey }) =>
+        this.prisma.receipt.create({
+          data: {
+            userId,
+            totalAmount: 0,
+            currencyCode: 'USD',
+            purchaseDate: new Date(),
+            images: {
+              create: {
+                storageKey,
+                mimeType: file.mimetype,
+                fileSizeBytes: file.size,
+              },
+            },
+          },
+          include: { images: true },
+        })
+      )
+    );
+    this.logger.debug(`Created ${receipts.length} receipt records`);
+
+    // 3 add bulk
+    await this.ocrQueue.addBulk(
+      receipts.map((receipt) => ({
+        name: 'process-receipt',
+        data: {
+          receiptId: receipt.id,
+          imageId: receipt.images[0].id,
+          storageKey: receipt.images[0].storageKey,
+        },
+      }))
+    );
+    this.logger.log(`Enqueued ${receipts.length} OCR jobs via addBulk`);
+
+    // 4 delete temp files
+    for (const { file } of uploaded) {
       if (file.path) {
         fs.unlink(file.path, (err) => {
           if (err) this.logger.error(`Failed to delete temp file ${file.path}`, err);
-          else this.logger.debug(`Cleaned up temp file ${file.path}`);
         });
       }
     }
+
+    // 5 202 status
+    return receipts.map((receipt) => ({
+      receiptId: receipt.id,
+      imageId: receipt.images[0].id,
+    }));
   }
 
   async getReceipts(userId: string, search: string | undefined, page: number, limit: number) {

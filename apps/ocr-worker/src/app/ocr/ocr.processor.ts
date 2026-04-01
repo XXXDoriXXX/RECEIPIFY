@@ -7,7 +7,13 @@ import { OcrOrchestrator } from './ocr-orchestrator.service';
 import { OcrJobData } from './interfaces/ocr-job.interface';
 import { Job, UnrecoverableError } from 'bullmq';
 
-@Processor('ocr-jobs', { concurrency: 5 })
+@Processor('ocr-jobs', {
+  concurrency: 5,
+  limiter: {
+    max: 15,
+    duration: 60_000, // max 15 works for 60s
+  },
+})
 export class OcrProcessor extends WorkerHost {
   private readonly logger = new Logger(OcrProcessor.name);
 

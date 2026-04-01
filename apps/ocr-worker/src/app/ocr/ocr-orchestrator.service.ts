@@ -23,8 +23,8 @@ export class OcrOrchestrator {
     });
 
     this.tiers = [
-      new GeminiMultimodalStrategy(this.aiClient, 'gemini-2.5-flash'), // Tier 1
-      new GeminiMultimodalStrategy(this.aiClient, 'gemini-1.5-flash'), // Tier 2
+      new GeminiMultimodalStrategy(this.aiClient, 'gemini-3.1-flash-lite-preview'), // Tier 1
+      new GeminiMultimodalStrategy(this.aiClient, 'gemini-2.5-flash'), // Tier 2
       new VisionGemmaHybridStrategy(this.aiClient, this.visionService), // Tier 3
     ];
   }
