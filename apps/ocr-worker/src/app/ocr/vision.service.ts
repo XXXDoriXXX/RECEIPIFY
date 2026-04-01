@@ -11,7 +11,7 @@ export class VisionService {
 
   constructor(private readonly parserService: ReceiptParserService) {}
 
-  async extractText(imageBuffer: Buffer): Promise<SmartReceiptResult> {
+  async extractText(imageBuffer: Buffer, existingCategories: string[]): Promise<SmartReceiptResult> {
     this.logger.log(`Sending image (${imageBuffer.length} bytes) to Google Vision API...`);
     try {
       const [result] = await this.client.documentTextDetection(imageBuffer);
@@ -22,7 +22,7 @@ export class VisionService {
 
       this.logger.log('Successfully extracted raw text. Delegating to AI Parser...');
 
-      const parsedData = await this.parserService.parse(rawText);
+      const parsedData = await this.parserService.parse(rawText, existingCategories);
       parsedData.rawText = rawText;
 
       return parsedData;

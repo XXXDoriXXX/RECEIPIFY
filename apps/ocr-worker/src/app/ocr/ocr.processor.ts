@@ -24,7 +24,27 @@ export class OcrProcessor extends WorkerHost {
     this.logger.log(`[Job ${job.id}] Started processing receipt: ${receiptId}`);
 
     try {
-      this.logger.debug(`[Job ${job.id}] Updating receipt status to processing...`);
+      this.logger.debug(`[Job ${job.id}] Fetching receipt and user categories...`);
+      const receiptRecord = await this.prisma.receipt.findUnique({
+        where: { id: receiptId },
+        include: { user: true }
+      });
+
+      if (!receiptRecord) {
+        throw new Error(`Receipt ${receiptId} not found in DB`);
+      }
+
+      const existingCategories = await this.prisma.category.findMany({
+        where: {
+          OR: [
+            { isSystem: true },
+            { userId: receiptRecord.userId }
+          ]
+        },
+        select: { name: true }
+      });
+      const categoryNames = existingCategories.map(c => c.name);
+
       await this.prisma.receipt.update({
         where: { id: receiptId },
         data: { status: 'processing' }
@@ -34,16 +54,10 @@ export class OcrProcessor extends WorkerHost {
       const imageBuffer = await this.storageService.getFileBuffer(storageKey);
 
       this.logger.debug(`[Job ${job.id}] Passing ${imageBuffer.length} bytes to vision extraction...`);
-      const parsedData = await this.visionService.extractText(imageBuffer);
+      const parsedData = await this.visionService.extractText(imageBuffer, categoryNames);
 
       this.logger.debug(`[Job ${job.id}] Starting transactional DB persistence...`);
       await this.prisma.$transaction(async (tx) => {
-        // 1 fetch the original receipt
-        const receiptRecord = await tx.receipt.findUnique({ where: { id: receiptId } });
-        if (!receiptRecord) {
-          throw new Error(`Receipt ${receiptId} not found in DB`);
-        }
-
         // clear any existing expense items in case this is a job retry
         this.logger.debug(`[Job ${job.id}] Idempotency check: Clearing prior expense items for receipt ${receiptId}`);
         await tx.expenseItem.deleteMany({ where: { receiptId: receiptId } });
@@ -75,10 +89,12 @@ export class OcrProcessor extends WorkerHost {
           where: { id: receiptId },
           data: {
             status: "done",
+            title: parsedData.receipt.title || `Receipt from ${merchantName}`,
             merchantId: merchant.id,
             totalAmount: parsedData.receipt.totalAmount || 0,
             currencyCode: parsedData.receipt.currencyCode || 'USD',
-            purchaseDate: purchaseDate
+            purchaseDate: purchaseDate,
+            notes: parsedData.receipt.notes
           }
         });
 
@@ -95,13 +111,20 @@ export class OcrProcessor extends WorkerHost {
         for (const item of parsedData.items) {
           const categoryName = item.suggestedCategory || 'Other';
           let category = await tx.category.findFirst({
-            where: { name: categoryName }
+            where: {
+              name: categoryName,
+              OR: [
+                { isSystem: true },
+                { userId: receiptRecord.userId }
+              ]
+            }
           });
           if (!category) {
             category = await tx.category.create({
               data: {
                 name: categoryName,
-                colorHex: '#9CA3AF', //default gray
+                colorHex: '#0006ff',
+                iconSlug: 'tag',
                 isSystem: false,
                 userId: receiptRecord.userId
               }
@@ -113,7 +136,8 @@ export class OcrProcessor extends WorkerHost {
               categoryId: category.id,
               name: item.name,
               amount: item.amount,
-              quantity: item.quantity || 1
+              quantity: item.quantity || 1,
+              unit: item.unit
             }
           });
         }

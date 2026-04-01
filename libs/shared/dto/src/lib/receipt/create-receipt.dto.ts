@@ -11,6 +11,7 @@ export const CreateReceiptSchema = z.object({
     name: z.string(),
     amount: z.number(),
     quantity: z.number().int().default(1),
+    unit: z.string().optional(),
   })).optional(),
 });
 

@@ -1,9 +1,8 @@
-
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenAI } from '@google/genai';
 import { SmartReceiptResult, SmartReceiptSchema } from './interfaces/smart-receipt.interface';
-import { RECEIPT_EXTRACTION_PROMPT } from './prompts/receipt-extraction.prompt';
+import { createReceiptExtractionPrompt } from './prompts/receipt-extraction.prompt';
 
 @Injectable()
 export class ReceiptParserService {
@@ -16,14 +15,15 @@ export class ReceiptParserService {
     });
   }
 
-  async parse(rawText: string): Promise<SmartReceiptResult> {
+  async parse(rawText: string, existingCategories: string[]): Promise<SmartReceiptResult> {
     this.logger.log('Sending raw OCR text to LLM for deep extraction...');
 
     try {
+      const prompt = createReceiptExtractionPrompt(existingCategories);
       const response = await this.aiClient.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: [
-          { role: 'user', parts: [{ text: RECEIPT_EXTRACTION_PROMPT + '\n\nRAW TEXT:\n' + rawText }] }
+          { role: 'user', parts: [{ text: prompt + '\n\nRAW TEXT:\n' + rawText }] }
         ],
         config: {
           responseMimeType: 'application/json',

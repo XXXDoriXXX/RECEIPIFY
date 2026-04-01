@@ -8,16 +8,19 @@ export const SmartReceiptSchema = z.object({
     country_code: z.string().nullable(),
   }),
   receipt: z.object({
+    title: z.string().nullable(),
     totalAmount: z.number(),
     currencyCode: z.string(),
     purchaseDate: z.string(),
+    notes: z.string().nullable(),
   }),
   items: z.array(
     z.object({
       name: z.string(),
       amount: z.number(),
       quantity: z.number(),
-      suggestedCategory: z.enum(['Groceries', 'Electronics', 'Restaurant', 'Transport', 'Other']).catch('Other'),
+      unit: z.string().nullable(),
+      suggestedCategory: z.string(),
     })
   ),
   rawText: z.string().optional(),
