@@ -7,17 +7,6 @@ import { OcrOrchestrator } from './ocr-orchestrator.service';
 import { OcrJobData } from './interfaces/ocr-job.interface';
 import { Job, UnrecoverableError } from 'bullmq';
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new UnrecoverableError(`${label} timed out after ${ms}ms`)),
-      ms,
-    );
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
-
 @Processor('ocr-jobs', { concurrency: 5 })
 export class OcrProcessor extends WorkerHost {
   private readonly logger = new Logger(OcrProcessor.name);
@@ -84,11 +73,20 @@ export class OcrProcessor extends WorkerHost {
       const aiStartedAt = Date.now();
       this.logger.debug(`[Job ${job.id}] Sending ${imageBuffer.length} bytes to OCR Orchestrator (Multi-Tier)...`);
 
-      const parsedData = await withTimeout(
-        this.ocrOrchestrator.extract(imageBuffer, mimeType, categoryNames),
-        120_000, // 2 min hard timeout
-        'OCR Orchestrator',
-      );
+      const controller = new AbortController();
+      const timeoutHandle = setTimeout(() => {
+        this.logger.warn(`[Job ${job.id}] OCR timeout (120s). Aborting request...`);
+        controller.abort();
+      }, 120_000);
+
+      let parsedData: Awaited<ReturnType<typeof this.ocrOrchestrator.extract>>;
+      try {
+        parsedData = await this.ocrOrchestrator.extract(
+          imageBuffer, mimeType, categoryNames, controller.signal,
+        );
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
       this.logger.debug(`[Job ${job.id}] OCR Orchestration finished in ${Date.now() - aiStartedAt}ms`);
 
       // 4 resolve or create missing categories
@@ -118,7 +116,10 @@ export class OcrProcessor extends WorkerHost {
       // 5 transactional persistence
       this.logger.debug(`[Job ${job.id}] Starting transactional DB persistence...`);
       await this.prisma.$transaction(async tx => {
-        await tx.expenseItem.deleteMany({ where: { receiptId } });
+
+        if (job.attemptsMade > 0) {
+          await tx.expenseItem.deleteMany({ where: { receiptId } });
+        }
         const merchantName = parsedData.merchant.name || 'Unknown Merchant';
         const merchant = await tx.merchant.upsert({
           where: { normalizedName: merchantName.toLowerCase() },

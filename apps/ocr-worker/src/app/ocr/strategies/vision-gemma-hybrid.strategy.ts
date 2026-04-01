@@ -16,7 +16,12 @@ export class VisionGemmaHybridStrategy implements OcrStrategy {
     private readonly visionService: VisionService
   ) {}
 
-  async process(imageBuffer: Buffer, mimeType: string, categories: string[]): Promise<SmartReceiptResult> {
+  async process(
+    imageBuffer: Buffer,
+    mimeType: string,
+    categories: string[],
+    signal: AbortSignal,
+  ): Promise<SmartReceiptResult> {
     this.logger.log('Starting hybrid extraction (Vision OCR + Gemma 3)...');
 
     // step 1: google vision ocr
@@ -24,6 +29,13 @@ export class VisionGemmaHybridStrategy implements OcrStrategy {
 
     if (!rawText?.trim()) {
       throw new Error('[HybridStrategy] Google Vision returned no text, cannot proceed with Gemma extraction');
+    }
+
+
+    if (signal.aborted) {
+      const abortError = new Error('Request aborted before Gemma step');
+      abortError.name = 'AbortError';
+      throw abortError;
     }
 
     // step 2: extract json text using Gemma 3
@@ -38,6 +50,9 @@ export class VisionGemmaHybridStrategy implements OcrStrategy {
           parts: [{ text: `${prompt}\n\nRAW TEXT FROM RECEIPT:\n${rawText}` }],
         },
       ],
+      config: {
+        abortSignal: signal
+      },
     });
 
     const rawResponse = response.text || '';
@@ -60,6 +75,7 @@ export class VisionGemmaHybridStrategy implements OcrStrategy {
       throw e;
     }
   }
+
   private cleanJsonString(input: string): string {
     return input
       .replace(/```json/g, '')

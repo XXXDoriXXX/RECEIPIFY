@@ -29,54 +29,39 @@ export class OcrOrchestrator {
     ];
   }
 
-  async extract(imageBuffer: Buffer, mimeType: string, categories: string[]): Promise<SmartReceiptResult> {
+
+  async extract(
+    imageBuffer: Buffer,
+    mimeType: string,
+    categories: string[],
+    signal: AbortSignal,
+  ): Promise<SmartReceiptResult> {
     for (const strategy of this.tiers) {
       try {
-        return await this.executeWithRetry(strategy, imageBuffer, mimeType, categories);
+        return await strategy.process(imageBuffer, mimeType, categories, signal);
       } catch (e) {
+
         if (e instanceof UnrecoverableError) {
           this.logger.error(`[${strategy.name}] Permanent error. Stopping.`);
           throw e;
+        }
+
+
+        if (e instanceof Error && e.name === 'AbortError') {
+          this.logger.error(`[${strategy.name}] Request aborted (timeout). Stopping pipeline.`);
+          throw e;
+        }
+
+        if (this.isQuotaError(e)) {
+          this.logger.warn(`[${strategy.name}] Rate limit (429). Trying next tier...`);
+          continue;
         }
 
         this.logger.warn(`[${strategy.name}] Failed. Attempting fallback to next tier...`);
       }
     }
 
-    throw new UnrecoverableError('All OCR extraction tiers exhausted without success');
-  }
-
-
-  private async executeWithRetry(
-    strategy: OcrStrategy,
-    imageBuffer: Buffer,
-    mimeType: string,
-    categories: string[]
-  ): Promise<SmartReceiptResult> {
-    const maxRetries = 3;
-    const initialDelay = 2000; // 2s
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await strategy.process(imageBuffer, mimeType, categories);
-      } catch (e) {
-        if (this.isQuotaError(e)) {
-          if (attempt < maxRetries) {
-            const delay = initialDelay * Math.pow(2, attempt - 1); // 2s, 4s, 8s backoff
-            this.logger.warn(`[${strategy.name}] Rate limit exceeded (429). Retry ${attempt}/${maxRetries} in ${delay}ms...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            continue;
-          } else {
-            this.logger.error(`[${strategy.name}] Max retries reached for 429 error.`);
-            throw e;
-          }
-        }
-
-        throw e;
-      }
-    }
-
-    throw new Error(`[${strategy.name}] Failed after retries`);
+    throw new Error('All OCR extraction tiers exhausted (likely rate limited). Delegating to BullMQ retry.');
   }
 
   private isQuotaError(err: unknown): boolean {

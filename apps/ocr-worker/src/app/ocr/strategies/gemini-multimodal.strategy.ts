@@ -14,7 +14,12 @@ export class GeminiMultimodalStrategy implements OcrStrategy {
     public readonly name: string
   ) {}
 
-  async process(imageBuffer: Buffer, mimeType: string, categories: string[]): Promise<SmartReceiptResult> {
+  async process(
+    imageBuffer: Buffer,
+    mimeType: string,
+    categories: string[],
+    signal: AbortSignal,
+  ): Promise<SmartReceiptResult> {
     const prompt = createReceiptExtractionPrompt(categories, 'image');
 
     this.logger.log(`Using ${this.name} for multimodal extraction...`);
@@ -37,6 +42,7 @@ export class GeminiMultimodalStrategy implements OcrStrategy {
       ],
       config: {
         responseMimeType: 'application/json',
+        abortSignal: signal,
       },
     });
 
