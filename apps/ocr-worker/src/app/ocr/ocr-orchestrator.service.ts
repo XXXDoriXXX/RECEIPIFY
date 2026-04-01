@@ -1,0 +1,93 @@
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { GoogleGenAI } from "@google/genai";
+import { SmartReceiptResult } from "./interfaces/smart-receipt.interface";
+import { OcrStrategy } from "./ocr.strategy";
+import { GeminiMultimodalStrategy } from "./strategies/gemini-multimodal.strategy";
+import { VisionGemmaHybridStrategy } from "./strategies/vision-gemma-hybrid.strategy";
+import { VisionService } from "./vision.service";
+import { UnrecoverableError } from "bullmq";
+
+@Injectable()
+export class OcrOrchestrator {
+  private readonly logger = new Logger(OcrOrchestrator.name);
+  private readonly aiClient: GoogleGenAI;
+  private readonly tiers: OcrStrategy[];
+
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly visionService: VisionService
+  ) {
+    this.aiClient = new GoogleGenAI({
+      apiKey: this.configService.get<string>('GEMINI_API_KEY')
+    });
+
+    this.tiers = [
+      new GeminiMultimodalStrategy(this.aiClient, 'gemini-2.5-flash'), // Tier 1
+      new GeminiMultimodalStrategy(this.aiClient, 'gemini-1.5-flash'), // Tier 2
+      new VisionGemmaHybridStrategy(this.aiClient, this.visionService), // Tier 3
+    ];
+  }
+
+  async extract(imageBuffer: Buffer, mimeType: string, categories: string[]): Promise<SmartReceiptResult> {
+    for (const strategy of this.tiers) {
+      try {
+        return await this.executeWithRetry(strategy, imageBuffer, mimeType, categories);
+      } catch (e) {
+        if (e instanceof UnrecoverableError) {
+          this.logger.error(`[${strategy.name}] Permanent error. Stopping.`);
+          throw e;
+        }
+
+        this.logger.warn(`[${strategy.name}] Failed. Attempting fallback to next tier...`);
+      }
+    }
+
+    throw new UnrecoverableError('All OCR extraction tiers exhausted without success');
+  }
+
+
+  private async executeWithRetry(
+    strategy: OcrStrategy,
+    imageBuffer: Buffer,
+    mimeType: string,
+    categories: string[]
+  ): Promise<SmartReceiptResult> {
+    const maxRetries = 3;
+    const initialDelay = 2000; // 2s
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await strategy.process(imageBuffer, mimeType, categories);
+      } catch (e) {
+        if (this.isQuotaError(e)) {
+          if (attempt < maxRetries) {
+            const delay = initialDelay * Math.pow(2, attempt - 1); // 2s, 4s, 8s backoff
+            this.logger.warn(`[${strategy.name}] Rate limit exceeded (429). Retry ${attempt}/${maxRetries} in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          } else {
+            this.logger.error(`[${strategy.name}] Max retries reached for 429 error.`);
+            throw e;
+          }
+        }
+
+        throw e;
+      }
+    }
+
+    throw new Error(`[${strategy.name}] Failed after retries`);
+  }
+
+  private isQuotaError(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    const msg = err.message || '';
+    const asAny = err as any;
+    return (
+      asAny.status === 429 ||
+      asAny.httpErrorCode === 429 ||
+      msg.includes('RESOURCE_EXHAUSTED') ||
+      msg.includes('429')
+    );
+  }
+}
