@@ -17,7 +17,7 @@ export class VisionGemmaHybridStrategy implements OcrStrategy {
   ) {}
 
   async process(
-    imageBuffer: Buffer,
+    filePath: string,
     mimeType: string,
     categories: string[],
     signal: AbortSignal,
@@ -25,7 +25,7 @@ export class VisionGemmaHybridStrategy implements OcrStrategy {
     this.logger.log('Starting hybrid extraction (Vision OCR + Gemma 3)...');
 
     // step 1: google vision ocr
-    const rawText = await this.visionService.extractRawText(imageBuffer);
+    const rawText = await this.visionService.extractRawText(filePath);
 
     if (!rawText?.trim()) {
       throw new Error('[HybridStrategy] Google Vision returned no text, cannot proceed with Gemma extraction');

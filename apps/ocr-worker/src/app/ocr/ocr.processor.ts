@@ -6,6 +6,7 @@ import { StorageService } from '@src/storage';
 import { OcrOrchestrator } from './ocr-orchestrator.service';
 import { OcrJobData } from './interfaces/ocr-job.interface';
 import { Job, UnrecoverableError } from 'bullmq';
+import * as fs from 'node:fs/promises';
 
 @Processor('ocr-jobs', {
   concurrency: 5,
@@ -31,6 +32,7 @@ export class OcrProcessor extends WorkerHost {
     this.logger.log(`[Job ${job.id}] Started processing receipt: ${receiptId}`);
 
     let receiptUserId: string | null = null;
+    let tempFilePath: string | null = null;
 
     try {
       //1 fetch receipt, then categories
@@ -72,12 +74,12 @@ export class OcrProcessor extends WorkerHost {
 
       const mimeType = imageRecord?.mimeType ?? 'image/jpeg';
 
-      //3 download image, send directly to Gemini
-      this.logger.debug(`[Job ${job.id}] Fetching image buffer from MinIO: ${storageKey}`);
-      const imageBuffer = await this.storageService.getFileBuffer(storageKey);
+      //3 download image to temp file
+      this.logger.debug(`[Job ${job.id}] Downloading image to temp file from MinIO: ${storageKey}`);
+      tempFilePath = await this.storageService.downloadToTempFile(storageKey);
 
       const aiStartedAt = Date.now();
-      this.logger.debug(`[Job ${job.id}] Sending ${imageBuffer.length} bytes to OCR Orchestrator (Multi-Tier)...`);
+      this.logger.debug(`[Job ${job.id}] Sending file ${tempFilePath} to OCR Orchestrator (Multi-Tier)...`);
 
       const controller = new AbortController();
       const timeoutHandle = setTimeout(() => {
@@ -88,7 +90,7 @@ export class OcrProcessor extends WorkerHost {
       let parsedData: Awaited<ReturnType<typeof this.ocrOrchestrator.extract>>;
       try {
         parsedData = await this.ocrOrchestrator.extract(
-          imageBuffer, mimeType, categoryNames, controller.signal,
+          tempFilePath, mimeType, categoryNames, controller.signal,
         );
       } finally {
         clearTimeout(timeoutHandle);
@@ -210,6 +212,13 @@ export class OcrProcessor extends WorkerHost {
       }
 
       throw e;
+    } finally {
+      if (tempFilePath) {
+        this.logger.debug(`[Job ${job.id}] Deleting temp file: ${tempFilePath}`);
+        await fs.unlink(tempFilePath).catch(err => {
+          this.logger.warn(`[Job ${job.id}] Failed to delete temp file ${tempFilePath}: ${err.message}`);
+        });
+      }
     }
   }
 }

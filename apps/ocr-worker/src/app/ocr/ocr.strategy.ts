@@ -2,7 +2,7 @@ import { SmartReceiptResult } from './interfaces/smart-receipt.interface';
 
 export interface OcrStrategy {
   process(
-    imageBuffer: Buffer,
+    filePath: string,
     mimeType: string,
     categories: string[],
     signal: AbortSignal,

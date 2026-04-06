@@ -15,51 +15,68 @@ export class GeminiMultimodalStrategy implements OcrStrategy {
   ) {}
 
   async process(
-    imageBuffer: Buffer,
+    filePath: string,
     mimeType: string,
     categories: string[],
     signal: AbortSignal,
   ): Promise<SmartReceiptResult> {
     const prompt = createReceiptExtractionPrompt(categories, 'image');
 
-    this.logger.log(`Using ${this.name} for multimodal extraction...`);
+    this.logger.log(`Using ${this.name} for multimodal extraction (File API)...`);
 
-    const response = await this.aiClient.models.generateContent({
-      model: this.name,
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              inlineData: {
-                mimeType,
-                data: imageBuffer.toString('base64'),
-              },
-            },
-            { text: prompt },
-          ],
-        },
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        abortSignal: signal,
-      },
+    // 1 upload to Gemini
+    const uploadResult = await this.aiClient.files.upload({
+      file: filePath,
+      config: { mimeType }
     });
 
-    const jsonString = response.text;
-    if (!jsonString?.trim()) {
-      throw new Error(`[${this.name}] AI returned an empty response`);
-    }
-
     try {
-      const parsedJson = JSON.parse(jsonString);
-      return SmartReceiptSchema.parse(parsedJson);
-    } catch (e) {
-      if (e instanceof ZodError || e instanceof SyntaxError) {
-        this.logger.error(`[${this.name}] Permanent data parsing error: ${e.message}`);
-        throw new UnrecoverableError(`Deterministic extraction failure with ${this.name}`);
+      this.logger.debug(`[${this.name}] File uploaded to Gemini: ${uploadResult.uri}`);
+
+      const response = await this.aiClient.models.generateContent({
+        model: this.name,
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                fileData: {
+                  fileUri: uploadResult.uri!,
+                  mimeType: uploadResult.mimeType!,
+                },
+              },
+              { text: prompt },
+            ],
+          },
+        ],
+        config: {
+          responseMimeType: 'application/json',
+          abortSignal: signal,
+        },
+      });
+
+      const jsonString = response.text;
+      if (!jsonString?.trim()) {
+        throw new Error(`[${this.name}] AI returned an empty response`);
       }
-      throw e;
+
+      try {
+        const parsedJson = JSON.parse(jsonString);
+        return SmartReceiptSchema.parse(parsedJson);
+      } catch (e) {
+        if (e instanceof ZodError || e instanceof SyntaxError) {
+          this.logger.error(`[${this.name}] Permanent data parsing error: ${e.message}`);
+          throw new UnrecoverableError(`Deterministic extraction failure with ${this.name}`);
+        }
+        throw e;
+      }
+    } finally {
+      // 2 clean up Gemini file
+      if (uploadResult.name) {
+        this.aiClient.files.delete({ name: uploadResult.name }).catch(err => {
+          this.logger.warn(`[${this.name}] Failed to delete Gemini file ${uploadResult.name}: ${err.message}`);
+        });
+      }
     }
   }
 }
