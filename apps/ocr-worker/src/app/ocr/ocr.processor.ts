@@ -7,10 +7,10 @@ import { Job } from 'bullmq';
 import { ReceiptProcessingService } from './receipt-processing.service';
 
 @Processor('ocr-jobs', {
-  concurrency: 5,
+  concurrency: 10,
   limiter: {
-    max: 15,
-    duration: 60_000, // max 15 works for 60s
+    max: 100,
+    duration: 60_000, // max 100 works for 60s
   },
 })
 export class OcrProcessor extends WorkerHost {

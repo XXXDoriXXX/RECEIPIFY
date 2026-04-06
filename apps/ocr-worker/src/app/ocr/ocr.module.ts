@@ -17,7 +17,7 @@ import { ReceiptProcessingService } from './receipt-processing.service';
         attempts: 5,
         backoff: {
           type: 'exponential',
-          delay: 10_000, // 10 20 40 80 160s
+          delay: 15_000, // 15 30 60 120s
         },
         removeOnComplete: { count: 500 },
         removeOnFail: { count: 100 },

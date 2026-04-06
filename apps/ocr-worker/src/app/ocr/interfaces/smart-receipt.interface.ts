@@ -11,7 +11,7 @@ export const SmartReceiptSchema = z.object({
     title: z.string().nullable(),
     totalAmount: z.number(),
     currencyCode: z.string(),
-    purchaseDate: z.string(),
+    purchaseDate: z.string().nullable().optional(),
     notes: z.string().nullable(),
   }),
   items: z.array(
