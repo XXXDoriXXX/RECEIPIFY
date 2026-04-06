@@ -10,18 +10,21 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  async getProfile(@CurrentUser() user: {id:string, email: string}){
-    return user
+  async getProfile(@CurrentUser() user: { id: string, email: string }) {
+    return user;
   }
 
   @Post('register')
-  @UsePipes(new ZodValidationPipe(RegisterSchema))
-  async register(@Body() dto: RegisterDto){
-    return this.authService.register(dto)
+  async register(
+    @Body(new ZodValidationPipe(RegisterSchema)) dto: RegisterDto
+  ) {
+    return this.authService.register(dto);
   }
+
   @Post('login')
-  @UsePipes(new ZodValidationPipe(LoginSchema))
-  async login(@Body() dto: LoginDto){
+  async login(
+    @Body(new ZodValidationPipe(LoginSchema)) dto: LoginDto
+  ) {
     return this.authService.login(dto);
   }
 }

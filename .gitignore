@@ -48,3 +48,4 @@ Thumbs.db
 /generated/prisma
 
 .nx/polygraph
+google-credentials.json

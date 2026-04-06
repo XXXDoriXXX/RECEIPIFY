@@ -8,6 +8,9 @@ import { LoggerModule } from '@src/logger';
 import { StorageModule } from '@src/storage';
 import {ReceiptModule} from "./receipts/receipt.module";
 import {BullModule} from "@nestjs/bullmq";
+import { CategoryModule } from './categories/category.module';
+import { UsersModule } from './users/users.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -27,6 +30,9 @@ import {BullModule} from "@nestjs/bullmq";
     LoggerModule,
     StorageModule,
     ReceiptModule,
+    CategoryModule,
+    UsersModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

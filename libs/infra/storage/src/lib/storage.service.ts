@@ -3,6 +3,10 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as Minio from 'minio';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
+import { pipeline } from 'node:stream/promises';
 
 @Injectable()
 export class StorageService implements OnModuleInit {
@@ -70,5 +74,18 @@ export class StorageService implements OnModuleInit {
       dataStream.on('end',() => resolve(Buffer.concat(chunks)));
       dataStream.on('error',(err)=>reject(err));
     })
+  }
+  async downloadToTempFile(storageKey: string): Promise<string> {
+    const dataStream = await this.minioClient.getObject(this.bucketName, storageKey);
+    const tmpDir = os.tmpdir();
+    const fileName = `receiptify-${uuidv4()}-${path.basename(storageKey)}`;
+    const filePath = path.join(tmpDir, fileName);
+
+    this.logger.debug(`Streaming MinIO object ${storageKey} to temp file: ${filePath}`);
+
+    const writeStream = fs.createWriteStream(filePath);
+    await pipeline(dataStream, writeStream);
+
+    return filePath;
   }
 }
