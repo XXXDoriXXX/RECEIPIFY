@@ -212,42 +212,24 @@ export class ReceiptService {
       if (dto.notes !== undefined) updateData.notes = dto.notes;
       if (merchantId !== receipt.merchantId) updateData.merchantId = merchantId;
 
-      if (dto.items && dto.items.length >= 0) {
-        // Find existing items
-        const existingItems = await tx.expenseItem.findMany({ where: { receiptId } });
-        const existingIds = existingItems.map(i => i.id);
-        const newIds = dto.items.map((i:any) => i.id).filter(Boolean);
+      if (dto.items && Array.isArray(dto.items)) {
+        this.logger.debug(`[updateReceipt] Replacing items for receipt ${receiptId} (count: ${dto.items.length})`);
 
-        const idsToDelete = existingIds.filter(id => !newIds.includes(id));
+        await tx.expenseItem.deleteMany({
+          where: { receiptId }
+        });
 
-        // delete removed items
-        if (idsToDelete.length) {
-          await tx.expenseItem.deleteMany({ where: { id: { in: idsToDelete } } });
-        }
-
-        // update or create new items
-        for (const item of dto.items) {
-          if (item.id) {
-            await tx.expenseItem.update({
-              where: { id: item.id },
-              data: {
-                name: item.name,
-                amount: item.amount,
-                quantity: item.quantity,
-                categoryId: item.categoryId,
-              }
-            });
-          } else {
-            await tx.expenseItem.create({
-              data: {
-                receiptId,
-                name: item.name,
-                amount: item.amount,
-                quantity: item.quantity,
-                categoryId: item.categoryId,
-              }
-            });
-          }
+        if (dto.items.length > 0) {
+          await tx.expenseItem.createMany({
+            data: dto.items.map((item: any) => ({
+              receiptId,
+              name: item.name,
+              amount: item.amount,
+              quantity: item.quantity || 1,
+              unit: item.unit,
+              categoryId: item.categoryId,
+            })),
+          });
         }
       }
 
