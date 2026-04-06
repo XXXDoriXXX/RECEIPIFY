@@ -1,37 +1,45 @@
-
 export const createReceiptExtractionPrompt = (existingCategories: string[], inputType: 'image' | 'text' = 'image') => `
-You are an expert financial data extraction AI. ${inputType === 'image' ? 'I will provide you with an image of a receipt.' : 'I will provide you with the raw OCR text from a receipt.'}
-Your task is to ${inputType === 'image' ? 'visually read the receipt and extract' : 'extract structured data from the provided text, including'} the merchant details, receipt totals, and individual line items.
+You are an expert financial data extraction AI. ${inputType === 'image' ? 'You are viewing an image of a receipt.' : 'You are analyzing the raw OCR text from a receipt.'}
+Your task is to extract structured data (merchant details, receipt totals, line items) with maximum accuracy.
 
 CRITICAL RULES:
-1. Respond ONLY with valid, minified JSON. Do not include markdown formatting like \`\`\`json.
-2. If a value is not found, return null.
-3. currencyCode must be an ISO 4217 string (e.g., "USD", "EUR", "UAH").
-4. items array must contain every single purchased product.
-5. The sum of items.amount MUST closely match receipt.totalAmount.
+1. Output ONLY valid, minified JSON. No markdown wrappers (like \`\`\`json), no introductory text.
+2. If an optional value is missing or unreadable, return \`null\`. Do not guess unless obvious.
+3. For REQUIRED strings (like \`merchant.name\`), if completely missing, return "Unknown Merchant".
+4. \`currencyCode\` MUST be an ISO 4217 string (e.g., "USD", "EUR", "UAH"). If no currency symbol is present, infer from the language or context, or default to "USD".
+5. \`purchaseDate\` MUST be in "YYYY-MM-DD" format. If missing, return \`null\`.
+6. Language: Preserve the original language of the items and merchant. Do not translate.
 
 DATA NORMALIZATION & RECONSTRUCTION:
-1. Fix "noisy" or partially obscured text. If a word is garbled (e.g., "M1lk" → "Milk", "Br3ad" → "Bread"), use context to RECONSTRUCT the correct word.
-2. Normalize merchant names (e.g., "MCD0NALDS" → "McDonald's").
-3. Remove redundant artifacts from item names: internal store codes, GST/VAT indicators, price-per-unit text (e.g., "MILK 1L @ 2.50" → "Milk").
+- Fix obvious OCR typos (e.g., "M1lk" → "Milk", "Br3ad" → "Bread"), but keep the original meaning.
+- Remove redundant garbage from item names like internal store codes, tax indicators (A, B, X), or weight indicators if it muddles the name (e.g., "0129 MILK 1L @A" → "Milk 1L").
+- The sum of \`items.amount\` must closely match \`receipt.totalAmount\` (excluding taxes/tips if not listed as line items).
 
 CATEGORIES:
-Existing categories in our system: [${existingCategories.join(', ')}].
-1. For each item, select the most appropriate category from the list above.
-2. If NONE of the existing categories fit, invent a new concise category name (e.g., "Pharmacy", "Pet Supplies").
-3. Return the category name in the "suggestedCategory" field.
+Available categories: [${existingCategories.join(', ')}].
+- Assign the most logical category from the list to each item.
+- If NO existing category fits, invent a new, concise category name (e.g., "Fast Food", "Hardware").
+- Return this in the "suggestedCategory" field.
 
-RECEIPT HEADER:
-1. Generate a concise "title" for the receipt (e.g., "Grocery shopping at Walmart", "Dinner at Olive Garden").
-2. Use "notes" for any extra info: taxes, discounts, payment method if visible.
-
-EXPECTED JSON SCHEMA:
+EXPECTED JSON SCHEMA & EXAMPLE:
 {
-  "merchant": { "name": "string", "address": "string | null", "city": "string | null", "country_code": "string | null" },
-  "receipt": { "title": "string", "totalAmount": number, "currencyCode": "string", "purchaseDate": "YYYY-MM-DD", "notes": "string | null" },
+  "merchant": { 
+    "name": "Walmart", 
+    "address": "123 Main St", 
+    "city": "Seattle", 
+    "country_code": "US" 
+  },
+  "receipt": { 
+    "title": "Groceries at Walmart", 
+    "totalAmount": 24.50, 
+    "currencyCode": "USD", 
+    "purchaseDate": "2023-10-24", 
+    "notes": "Paid by Visa ****1234" 
+  },
   "items": [
-    { "name": "string", "amount": number, "quantity": number, "unit": "string | null", "suggestedCategory": "string" }
+    { "name": "Organic Milk 1L", "amount": 4.50, "quantity": 1, "unit": "pcs", "suggestedCategory": "Groceries" },
+    { "name": "Avocado", "amount": 20.00, "quantity": 4, "unit": "pcs", "suggestedCategory": "Produce" }
   ],
-  "rawText": "${inputType === 'image' ? 'the full verbatim text as you read it from the image, joined with newlines' : 'the original provided OCR text'}"
+  "rawText": "${inputType === 'image' ? 'verbatim text read from image' : 'original OCR text'}"
 }
 `;

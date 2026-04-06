@@ -53,11 +53,13 @@ export class OcrOrchestrator {
         }
 
         if (this.isQuotaError(e)) {
-          this.logger.warn(`[${strategy.name}] Rate limit (429). Trying next tier...`);
+          this.logger.warn(`[${strategy.name}] Rate limit (429). Waiting 500ms before trying next tier...`);
+          await new Promise(r => setTimeout(r, 500));
           continue;
         }
 
-        this.logger.warn(`[${strategy.name}] Failed. Attempting fallback to next tier...`);
+        this.logger.warn(`[${strategy.name}] Failed. Waiting 200ms before attempting fallback to next tier...`);
+        await new Promise(r => setTimeout(r, 200));
       }
     }
 

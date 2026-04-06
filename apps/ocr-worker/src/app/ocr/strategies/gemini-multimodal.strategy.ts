@@ -65,8 +65,8 @@ export class GeminiMultimodalStrategy implements OcrStrategy {
         return SmartReceiptSchema.parse(parsedJson);
       } catch (e) {
         if (e instanceof ZodError || e instanceof SyntaxError) {
-          this.logger.error(`[${this.name}] Permanent data parsing error: ${e.message}`);
-          throw new UnrecoverableError(`Deterministic extraction failure with ${this.name}`);
+          this.logger.error(`[${this.name}] Data parsing error: ${e.message}`);
+          throw new Error(`Data parsing or validation failure with ${this.name}`);
         }
         throw e;
       }

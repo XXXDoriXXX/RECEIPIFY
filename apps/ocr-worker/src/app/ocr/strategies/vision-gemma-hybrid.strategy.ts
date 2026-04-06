@@ -70,7 +70,7 @@ export class VisionGemmaHybridStrategy implements OcrStrategy {
     } catch (e) {
       if (e instanceof ZodError || e instanceof SyntaxError) {
         this.logger.error(`[HybridStrategy] Gemma 3 extraction error: ${e.message}. Raw output: ${rawResponse.substring(0, 100)}...`);
-        throw new UnrecoverableError('Deterministic extraction failure with Gemma 3');
+        throw new Error('Data parsing or validation failure with Gemma 3');
       }
       throw e;
     }

@@ -5,6 +5,7 @@ import { StorageModule } from '@src/storage';
 import { OcrProcessor } from './ocr.processor';
 import { OcrOrchestrator } from './ocr-orchestrator.service';
 import { VisionService } from './vision.service';
+import { ReceiptProcessingService } from './receipt-processing.service';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { VisionService } from './vision.service';
         attempts: 5,
         backoff: {
           type: 'exponential',
-          delay: 10_000, // 10 20 40 80 160s
+          delay: 15_000, // 15 30 60 120s
         },
         removeOnComplete: { count: 500 },
         removeOnFail: { count: 100 },
@@ -26,7 +27,8 @@ import { VisionService } from './vision.service';
   providers: [
     OcrProcessor,
     OcrOrchestrator,
-    VisionService
+    VisionService,
+    ReceiptProcessingService,
   ],
 })
 export class OcrModule {}
