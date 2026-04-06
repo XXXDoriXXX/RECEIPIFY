@@ -5,6 +5,7 @@ import { StorageModule } from '@src/storage';
 import { OcrProcessor } from './ocr.processor';
 import { OcrOrchestrator } from './ocr-orchestrator.service';
 import { VisionService } from './vision.service';
+import { ReceiptProcessingService } from './receipt-processing.service';
 
 @Module({
   imports: [
@@ -26,7 +27,8 @@ import { VisionService } from './vision.service';
   providers: [
     OcrProcessor,
     OcrOrchestrator,
-    VisionService
+    VisionService,
+    ReceiptProcessingService,
   ],
 })
 export class OcrModule {}
