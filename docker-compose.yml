@@ -24,6 +24,28 @@ services:
       - "6379:6379"
     networks:
       - backend-network
+  ocr-worker:
+    build:
+      context: .
+      dockerfile: apps/ocr-worker/Dockerfile
+    container_name: receiptify-ocr-worker
+    restart: always
+    environment:
+      - UV_THREADPOOL_SIZE=12
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DATABASE_URL=${DATABASE_URL}?connection_limit=15
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET_NAME=receipts
+    depends_on:
+      - redis
+      - minio
+    networks:
+      - backend-network
 networks:
   backend-network:
     driver: bridge

@@ -6,11 +6,11 @@ export class VisionService {
   private readonly logger = new Logger(VisionService.name);
   private readonly client = new ImageAnnotatorClient();
 
-  async extractRawText(filePath: string): Promise<string> {
-    this.logger.log(`Performing traditional OCR with Google Vision for ${filePath}...`);
+  async extractRawText(imageBuffer: Buffer): Promise<string> {
+    this.logger.log(`Performing traditional OCR with Google Vision using Buffer (${imageBuffer.length} bytes)...`);
     try {
       const [result] = await this.client.documentTextDetection({
-        image: { source: { filename: filePath } },
+        image: { content: imageBuffer },
       });
       const rawText = result.fullTextAnnotation?.text || '';
 

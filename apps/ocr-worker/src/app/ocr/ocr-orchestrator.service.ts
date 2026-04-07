@@ -31,14 +31,14 @@ export class OcrOrchestrator {
 
 
   async extract(
-    filePath: string,
+    imageBuffer: Buffer,
     mimeType: string,
     categories: string[],
     signal: AbortSignal,
   ): Promise<SmartReceiptResult> {
     for (const strategy of this.tiers) {
       try {
-        return await strategy.process(filePath, mimeType, categories, signal);
+        return await strategy.process(imageBuffer, mimeType, categories, signal);
       } catch (e) {
 
         if (e instanceof UnrecoverableError) {

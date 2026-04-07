@@ -5,6 +5,12 @@ import { OcrOrchestrator } from './ocr-orchestrator.service';
 import { OcrJobData } from './interfaces/ocr-job.interface';
 import { Job } from 'bullmq';
 import * as fs from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import sharp from 'sharp';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { v4 as uuidv4 } from 'uuid';
+import { pipeline } from 'node:stream/promises';
 
 @Injectable()
 export class ReceiptProcessingService {
@@ -59,12 +65,24 @@ export class ReceiptProcessingService {
 
       const mimeType = imageRecord?.mimeType ?? 'image/jpeg';
 
-      // 3. Download image to temp file
-      this.logger.debug(`[Job ${job.id}] Downloading image to temp file from MinIO: ${storageKey}`);
-      tempFilePath = await this.storageService.downloadToTempFile(storageKey);
+      // 3. Download and pre-process image (Resizing/Compression)
+      this.logger.debug(`[Job ${job.id}] Streaming and pre-processing image from MinIO: ${storageKey}`);
+
+      const tmpDir = os.tmpdir();
+      tempFilePath = path.join(tmpDir, `receiptify-proc-${uuidv4()}.jpg`);
+
+      const imageStream = await this.storageService.getObjectStream(storageKey);
+      const resizer = sharp()
+        .resize(1600, null, { withoutEnlargement: true })
+        .jpeg({ quality: 80, progressive: true });
+
+      await pipeline(imageStream as any, resizer, createWriteStream(tempFilePath));
+
+      const processedBuffer = await fs.readFile(tempFilePath);
+      this.logger.debug(`[Job ${job.id}] Image pre-processed: ${processedBuffer.length} bytes. Path: ${tempFilePath}`);
 
       const aiStartedAt = Date.now();
-      this.logger.debug(`[Job ${job.id}] Sending file ${tempFilePath} to OCR Orchestrator (Multi-Tier)...`);
+      this.logger.debug(`[Job ${job.id}] Sending buffer to OCR Orchestrator (Multi-Tier)...`);
 
       const controller = new AbortController();
       const timeoutHandle = setTimeout(() => {
@@ -75,8 +93,8 @@ export class ReceiptProcessingService {
       let parsedData: Awaited<ReturnType<typeof this.ocrOrchestrator.extract>>;
       try {
         parsedData = await this.ocrOrchestrator.extract(
-          tempFilePath,
-          mimeType,
+          processedBuffer,
+          'image/jpeg',
           categoryNames,
           controller.signal,
         );
