@@ -3,7 +3,6 @@ version: '3.9'
 services:
   minio:
     image: minio/minio:latest
-    container_name: receiptify-storage
     restart: always
     ports:
       - "9000:9000"
@@ -16,19 +15,19 @@ services:
     command: server /data --console-address ":9001"
     networks:
       - backend-network
+
   redis:
     image: redis:7-alpine
-    container_name: receiptify-cache
     restart: always
     ports:
       - "6379:6379"
     networks:
       - backend-network
+
   ocr-worker:
     build:
       context: .
       dockerfile: apps/ocr-worker/Dockerfile
-    container_name: receiptify-ocr-worker
     restart: always
     environment:
       - UV_THREADPOOL_SIZE=12
@@ -46,9 +45,36 @@ services:
       - minio
     networks:
       - backend-network
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DATABASE_URL=${DATABASE_URL}?connection_limit=15
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET_NAME=receipts
+      - JWT_SECRET=${JWT_SECRET:-supersecret}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - redis
+      - minio
+    networks:
+      - backend-network
+
 networks:
   backend-network:
     driver: bridge
+
 volumes:
   minio_data:
 

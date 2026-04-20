@@ -48,7 +48,9 @@ export class ReceiptProcessingService {
         select: { id: true, name: true },
       });
 
-      const categoryMap = new Map(categories.map((c) => [c.name, c]));
+      const categoryMap = new Map<string, { id: string; name: string }>(
+        categories.map((c) => [c.name, c])
+      );
       const categoryNames = [...categoryMap.keys()];
 
       // 2. Mark as processing
