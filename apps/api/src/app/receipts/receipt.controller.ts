@@ -3,6 +3,8 @@ import {
   MaxFileSizeValidator,
   ParseFilePipe,
   Post,
+  Get,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors
@@ -13,6 +15,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { diskStorage } from "multer";
 import * as os from "os";
 import { CurrentUser } from "@src/decorators";
+import { SearchReceiptsDto } from "@src/dto";
 
 @Controller('receipt')
 @UseGuards(JwtAuthGuard)
@@ -46,5 +49,13 @@ export class ReceiptController {
         }),
     ) file: Express.Multer.File) {
     return this.receiptService.processUpload(file, userid);
+  }
+
+  @Get()
+  async searchReceipts(
+    @CurrentUser('id') userid: string,
+    @Query() params: SearchReceiptsDto
+  ) {
+    return this.receiptService.searchReceipts(userid, params);
   }
 }

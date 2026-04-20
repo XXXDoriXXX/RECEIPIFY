@@ -9,7 +9,7 @@ datasource db {
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  previewFeatures = ["driverAdapters", "fullTextSearchPostgres"]
 }
 
 enum ReceiptStatus {
@@ -102,6 +102,8 @@ model Receipt {
   @@index([userId, purchaseDate(sort: Desc)])
   @@index([userId, deletedAt])
   @@index([merchantId])
+  @@index([userId, status])
+  @@index([userId, totalAmount])
 }
 
 model ReceiptImage {

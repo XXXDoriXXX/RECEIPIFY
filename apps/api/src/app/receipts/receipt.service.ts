@@ -1,10 +1,12 @@
 import 'multer';
 import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
-import {PrismaService} from "@src/prisma";
-import {StorageService} from "@src/storage";
-import {InjectQueue} from "@nestjs/bullmq";
-import {Queue} from "bullmq";
+import { PrismaService } from "@src/prisma";
+import { StorageService } from "@src/storage";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
+import { SearchReceiptsDto } from "@src/dto";
+import { Prisma } from "@prisma/client";
 
 @Injectable()
 export class ReceiptService {
@@ -22,7 +24,7 @@ export class ReceiptService {
       //upload s3
       const storageKey = await this.storageService.uploadFile(file, userId);
       this.logger.debug(`Storage upload complete: ${storageKey}. Creating DB record...`);
-      
+
       //create DB record
       const receipt = await this.prisma.receipt.create({
         data: {
@@ -74,4 +76,76 @@ export class ReceiptService {
     }
   }
 
+  async searchReceipts(userId: string, params: SearchReceiptsDto) {
+    const { query, status, minAmount, maxAmount, startDate, endDate, cursor, take = 20 } = params;
+
+    const where: Prisma.ReceiptWhereInput = {
+      userId,
+      deletedAt: null,
+    };
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (minAmount !== undefined || maxAmount !== undefined) {
+      where.totalAmount = {};
+      if (minAmount !== undefined) where.totalAmount.gte = minAmount;
+      if (maxAmount !== undefined) where.totalAmount.lte = maxAmount;
+    }
+
+    if (startDate !== undefined || endDate !== undefined) {
+      where.purchaseDate = {};
+      if (startDate !== undefined) where.purchaseDate.gte = startDate;
+      if (endDate !== undefined) where.purchaseDate.lte = endDate;
+    }
+
+    if (query) {
+      where.OR = [
+        { title: { search: query } as any },
+        { merchant: { name: { search: query } as any } },
+      ];
+    }
+
+    const receipts = await this.prisma.receipt.findMany({
+      where,
+      take: take + 1,
+      cursor: cursor ? { id: cursor } : undefined,
+      skip: cursor ? 1 : 0,
+      orderBy: { purchaseDate: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        totalAmount: true,
+        currencyCode: true,
+        purchaseDate: true,
+        status: true,
+        source: true,
+        merchant: {
+          select: {
+            id: true,
+            name: true,
+          }
+        },
+        images: {
+          select: {
+            id: true,
+            storageKey: true,
+            ocrStatus: true,
+          }
+        }
+      }
+    });
+
+    let nextCursor: typeof cursor | null = null;
+    if (receipts.length > take) {
+      const nextItem = receipts.pop();
+      nextCursor = nextItem!.id;
+    }
+
+    return {
+      data: receipts,
+      nextCursor,
+    };
+  }
 }
