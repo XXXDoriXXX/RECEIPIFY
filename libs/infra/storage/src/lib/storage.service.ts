@@ -70,11 +70,16 @@ export class StorageService implements OnModuleInit {
     const dataStream = await this.minioClient.getObject(this.bucketName, storageKey);
     const chunks: Buffer[] = [];
     return new Promise((resolve, reject) => {
-      dataStream.on('data',(chunk)=>chunks.push(chunk));
-      dataStream.on('end',() => resolve(Buffer.concat(chunks)));
-      dataStream.on('error',(err)=>reject(err));
-    })
+      dataStream.on('data', (chunk) => chunks.push(chunk));
+      dataStream.on('end', () => resolve(Buffer.concat(chunks)));
+      dataStream.on('error', (err) => reject(err));
+    });
   }
+
+  async getObjectStream(storageKey: string): Promise<NodeJS.ReadableStream> {
+    return await this.minioClient.getObject(this.bucketName, storageKey);
+  }
+
   async downloadToTempFile(storageKey: string): Promise<string> {
     const dataStream = await this.minioClient.getObject(this.bucketName, storageKey);
     const tmpDir = os.tmpdir();

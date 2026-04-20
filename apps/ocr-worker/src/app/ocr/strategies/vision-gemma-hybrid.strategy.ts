@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { SmartReceiptResult, SmartReceiptSchema } from "../interfaces/smart-receipt.interface";
 import { OcrStrategy } from "../ocr.strategy";
-import { createReceiptExtractionPrompt } from "../prompts/receipt-extraction.prompt";
+import { createReceiptExtractionPrompt, EXTRACTION_SYSTEM_INSTRUCTION } from "../prompts/receipt-extraction.prompt";
 import { VisionService } from "../vision.service";
 import { Logger } from "@nestjs/common";
 import { ZodError } from "zod";
@@ -17,7 +17,7 @@ export class VisionGemmaHybridStrategy implements OcrStrategy {
   ) {}
 
   async process(
-    filePath: string,
+    imageBuffer: Buffer,
     mimeType: string,
     categories: string[],
     signal: AbortSignal,
@@ -25,7 +25,7 @@ export class VisionGemmaHybridStrategy implements OcrStrategy {
     this.logger.log('Starting hybrid extraction (Vision OCR + Gemma 3)...');
 
     // step 1: google vision ocr
-    const rawText = await this.visionService.extractRawText(filePath);
+    const rawText = await this.visionService.extractRawText(imageBuffer);
 
     if (!rawText?.trim()) {
       throw new Error('[HybridStrategy] Google Vision returned no text, cannot proceed with Gemma extraction');
@@ -51,6 +51,7 @@ export class VisionGemmaHybridStrategy implements OcrStrategy {
         },
       ],
       config: {
+        systemInstruction: EXTRACTION_SYSTEM_INSTRUCTION,
         abortSignal: signal
       },
     });

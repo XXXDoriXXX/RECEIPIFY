@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { SmartReceiptResult, SmartReceiptSchema } from "../interfaces/smart-receipt.interface";
 import { OcrStrategy } from "../ocr.strategy";
-import { createReceiptExtractionPrompt } from "../prompts/receipt-extraction.prompt";
+import { createReceiptExtractionPrompt, EXTRACTION_SYSTEM_INSTRUCTION } from "../prompts/receipt-extraction.prompt";
 import { Logger } from "@nestjs/common";
 import { ZodError } from "zod";
 import { UnrecoverableError } from "bullmq";
@@ -15,24 +15,16 @@ export class GeminiMultimodalStrategy implements OcrStrategy {
   ) {}
 
   async process(
-    filePath: string,
+    imageBuffer: Buffer,
     mimeType: string,
     categories: string[],
     signal: AbortSignal,
   ): Promise<SmartReceiptResult> {
     const prompt = createReceiptExtractionPrompt(categories, 'image');
 
-    this.logger.log(`Using ${this.name} for multimodal extraction (File API)...`);
-
-    // 1 upload to Gemini
-    const uploadResult = await this.aiClient.files.upload({
-      file: filePath,
-      config: { mimeType }
-    });
+    this.logger.log(`Using ${this.name} for multimodal extraction (inlineData)...`);
 
     try {
-      this.logger.debug(`[${this.name}] File uploaded to Gemini: ${uploadResult.uri}`);
-
       const response = await this.aiClient.models.generateContent({
         model: this.name,
         contents: [
@@ -40,9 +32,9 @@ export class GeminiMultimodalStrategy implements OcrStrategy {
             role: 'user',
             parts: [
               {
-                fileData: {
-                  fileUri: uploadResult.uri!,
-                  mimeType: uploadResult.mimeType!,
+                inlineData: {
+                  data: imageBuffer.toString('base64'),
+                  mimeType,
                 },
               },
               { text: prompt },
@@ -50,7 +42,50 @@ export class GeminiMultimodalStrategy implements OcrStrategy {
           },
         ],
         config: {
+          systemInstruction: EXTRACTION_SYSTEM_INSTRUCTION,
           responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'OBJECT',
+            properties: {
+              merchant: {
+                type: 'OBJECT',
+                properties: {
+                  name: { type: 'STRING' },
+                  address: { type: 'STRING' },
+                  city: { type: 'STRING' },
+                  country_code: { type: 'STRING' },
+                },
+                required: ["name"],
+              },
+              receipt: {
+                type: 'OBJECT',
+                properties: {
+                  title: { type: 'STRING' },
+                  totalAmount: { type: 'NUMBER' },
+                  currencyCode: { type: 'STRING' },
+                  purchaseDate: { type: 'STRING' },
+                  notes: { type: 'STRING' },
+                },
+                required: ["totalAmount", "currencyCode"],
+              },
+              items: {
+                type: 'ARRAY',
+                items: {
+                  type: 'OBJECT',
+                  properties: {
+                    name: { type: 'STRING' },
+                    amount: { type: 'NUMBER' },
+                    quantity: { type: 'NUMBER' },
+                    unit: { type: 'STRING' },
+                    suggestedCategory: { type: 'STRING' },
+                  },
+                  required: ["name", "amount", "quantity", "suggestedCategory"],
+                },
+              },
+              rawText: { type: 'STRING' },
+            },
+            required: ["merchant", "receipt", "items"],
+          },
           abortSignal: signal,
         },
       });
@@ -70,13 +105,12 @@ export class GeminiMultimodalStrategy implements OcrStrategy {
         }
         throw e;
       }
-    } finally {
-      // 2 clean up Gemini file
-      if (uploadResult.name) {
-        this.aiClient.files.delete({ name: uploadResult.name }).catch(err => {
-          this.logger.warn(`[${this.name}] Failed to delete Gemini file ${uploadResult.name}: ${err.message}`);
-        });
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') {
+        throw e;
       }
+      this.logger.error(`[${this.name}] Model execution failed: ${e.message}`, e.stack);
+      throw e;
     }
   }
 }
