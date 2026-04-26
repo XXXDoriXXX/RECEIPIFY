@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ReceiptController } from './receipt.controller';
-import { ReceiptService } from './receipt.service';
+import { ReceiptUploadService } from './receipt-upload.service';
+import { ReceiptSearchService } from './receipt-search.service';
 import { PrismaModule } from '@src/prisma';
 import {BullModule} from "@nestjs/bullmq";
 
@@ -12,6 +13,6 @@ import {BullModule} from "@nestjs/bullmq";
     }),
   ],
   controllers: [ReceiptController],
-  providers: [ReceiptService],
+  providers: [ReceiptUploadService, ReceiptSearchService],
 })
 export class ReceiptModule {}

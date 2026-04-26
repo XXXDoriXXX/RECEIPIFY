@@ -5,12 +5,10 @@ import { PrismaService } from "@src/prisma";
 import { StorageService } from "@src/storage";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Queue } from "bullmq";
-import { SearchReceiptsDto } from "@src/dto";
-import { Prisma } from "@prisma/client";
 
 @Injectable()
-export class ReceiptService {
-  private readonly logger = new Logger(ReceiptService.name);
+export class ReceiptUploadService {
+  private readonly logger = new Logger(ReceiptUploadService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
@@ -21,11 +19,9 @@ export class ReceiptService {
     this.logger.log(`Processing receipt upload: ${userId}, file: ${file.originalname}`);
     try {
       this.logger.debug(`Starting storage upload for ${file.originalname}`);
-      //upload s3
       const storageKey = await this.storageService.uploadFile(file, userId);
       this.logger.debug(`Storage upload complete: ${storageKey}. Creating DB record...`);
-
-      //create DB record
+      
       const receipt = await this.prisma.receipt.create({
         data: {
           userId: userId,
@@ -45,7 +41,7 @@ export class ReceiptService {
         }
       });
       this.logger.log(`Receipt and image records created successfully: ${receipt.id}`);
-      //enqueue ocr job
+      
       await this.ocrQueue.add('process-receipt', {
         receiptId:receipt.id,
         imageId:receipt.images[0].id,
@@ -54,11 +50,11 @@ export class ReceiptService {
         attempts: 5,
         backoff: {
           type: 'exponential',
-          delay: 10000, // 10s base delay
+          delay: 10000, 
         },
         removeOnComplete: true,
         removeOnFail: false,
-      })
+      });
       this.logger.log(`Successfully enqueued OCR job for receipt: ${receipt.id}`);
 
       return {
@@ -74,78 +70,5 @@ export class ReceiptService {
         });
       }
     }
-  }
-
-  async searchReceipts(userId: string, params: SearchReceiptsDto) {
-    const { query, status, minAmount, maxAmount, startDate, endDate, cursor, take = 20 } = params;
-
-    const where: Prisma.ReceiptWhereInput = {
-      userId,
-      deletedAt: null,
-    };
-
-    if (status) {
-      where.status = status;
-    }
-
-    if (minAmount !== undefined || maxAmount !== undefined) {
-      where.totalAmount = {};
-      if (minAmount !== undefined) where.totalAmount.gte = minAmount;
-      if (maxAmount !== undefined) where.totalAmount.lte = maxAmount;
-    }
-
-    if (startDate !== undefined || endDate !== undefined) {
-      where.purchaseDate = {};
-      if (startDate !== undefined) where.purchaseDate.gte = startDate;
-      if (endDate !== undefined) where.purchaseDate.lte = endDate;
-    }
-
-    if (query) {
-      where.OR = [
-        { title: { search: query } as any },
-        { merchant: { name: { search: query } as any } },
-      ];
-    }
-
-    const receipts = await this.prisma.receipt.findMany({
-      where,
-      take: take + 1,
-      cursor: cursor ? { id: cursor } : undefined,
-      skip: cursor ? 1 : 0,
-      orderBy: { purchaseDate: 'desc' },
-      select: {
-        id: true,
-        title: true,
-        totalAmount: true,
-        currencyCode: true,
-        purchaseDate: true,
-        status: true,
-        source: true,
-        merchant: {
-          select: {
-            id: true,
-            name: true,
-          }
-        },
-        images: {
-          select: {
-            id: true,
-            storageKey: true,
-            ocrStatus: true,
-          }
-        }
-      }
-    });
-
-    let nextCursor: typeof cursor | null = null;
-    if (receipts.length > take) {
-      const nextItem = receipts.pop();
-      nextCursor = nextItem!.id;
-    }
-
-    return {
-      data: receipts,
-      nextCursor,
-    };
   }
 }

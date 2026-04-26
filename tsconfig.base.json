@@ -10,19 +10,42 @@
     "importHelpers": true,
     "target": "es2015",
     "module": "esnext",
-    "lib": ["es2020", "dom"],
+    "lib": [
+      "es2020",
+      "dom"
+    ],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@src/dto": ["libs/shared/dto/src/index.ts"],
-      "@src/prisma": ["libs/infra/prisma/src/index.ts"],
-      "@src/storage": ["libs/infra/storage/src/index.ts"],
-      "@src/pipes": ["libs/shared/pipes/src/index.ts"],
-      "@src/logger": ["libs/infra/logger/src/index.ts"],
-      "@src/guards": ["libs/shared/guards/src/index.ts"],
-      "@src/decorators": ["libs/shared/decorators/src/index.ts"]
+      "@src/dto": [
+        "libs/shared/dto/src/index.ts"
+      ],
+      "@src/prisma": [
+        "libs/infra/prisma/src/index.ts"
+      ],
+      "@src/storage": [
+        "libs/infra/storage/src/index.ts"
+      ],
+      "@src/pipes": [
+        "libs/shared/pipes/src/index.ts"
+      ],
+      "@src/logger": [
+        "libs/infra/logger/src/index.ts"
+      ],
+      "@src/guards": [
+        "libs/shared/guards/src/index.ts"
+      ],
+      "@src/decorators": [
+        "libs/shared/decorators/src/index.ts"
+      ],
+      "@src/receipt-persistence": [
+        "libs/shared/receipt-persistence/src/index.ts"
+      ]
     }
   },
-  "exclude": ["node_modules", "tmp"]
+  "exclude": [
+    "node_modules",
+    "tmp"
+  ]
 }

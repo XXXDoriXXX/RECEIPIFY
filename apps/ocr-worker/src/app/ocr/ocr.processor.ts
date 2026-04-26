@@ -5,7 +5,9 @@ import { PrismaService } from "@src/prisma";
 import { StorageService } from "@src/storage";
 import { VisionService } from "./vision.service";
 import { OcrJobData } from "./interfaces/ocr-job.interface";
+import { ReceiptPersistenceService } from "@src/receipt-persistence";
 import { Job } from "bullmq";
+import { ExtractionContext } from "./prompts/receipt-extraction.prompt";
 
 @Processor('ocr-jobs')
 export class OcrProcessor extends WorkerHost {
@@ -14,7 +16,8 @@ export class OcrProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
-    private readonly visionService: VisionService
+    private readonly visionService: VisionService,
+    private readonly persistenceService: ReceiptPersistenceService
   ) {
     super();
   }
@@ -33,93 +36,36 @@ export class OcrProcessor extends WorkerHost {
       this.logger.debug(`[Job ${job.id}] Fetching image buffer from MinIO for key: ${storageKey}`);
       const imageBuffer = await this.storageService.getFileBuffer(storageKey);
 
-      this.logger.debug(`[Job ${job.id}] Passing ${imageBuffer.length} bytes to vision extraction...`);
-      const parsedData = await this.visionService.extractText(imageBuffer);
-
-      this.logger.debug(`[Job ${job.id}] Starting transactional DB persistence...`);
-      await this.prisma.$transaction(async (tx) => {
-        // 1 fetch the original receipt
-        const receiptRecord = await tx.receipt.findUnique({ where: { id: receiptId } });
-        if (!receiptRecord) {
-          throw new Error(`Receipt ${receiptId} not found in DB`);
-        }
-
-        // clear any existing expense items in case this is a job retry
-        this.logger.debug(`[Job ${job.id}] Idempotency check: Clearing prior expense items for receipt ${receiptId}`);
-        await tx.expenseItem.deleteMany({ where: { receiptId: receiptId } });
-
-        // 2 find or create merchant
-        const merchantName = parsedData.merchant.name || 'Unknown Merchant';
-        const merchant = await tx.merchant.upsert({
-          where: { normalizedName: merchantName.toLowerCase() },
-          update: {
-            address: parsedData.merchant.address,
-            city: parsedData.merchant.city,
-            countryCode: parsedData.merchant.country_code,
-          },
-          create: {
-            name: merchantName,
-            normalizedName: merchantName.toLowerCase(),
-            address: parsedData.merchant.address,
-            city: parsedData.merchant.city,
-            countryCode: parsedData.merchant.country_code,
-          }
-        });
-
-        // 3 update the receipt header
-        const purchaseDate = parsedData.receipt.purchaseDate
-          ? new Date(parsedData.receipt.purchaseDate)
-          : new Date();
-
-        await tx.receipt.update({
-          where: { id: receiptId },
-          data: {
-            status: "done",
-            merchantId: merchant.id,
-            totalAmount: parsedData.receipt.totalAmount || 0,
-            currencyCode: parsedData.receipt.currencyCode || 'USD',
-            purchaseDate: purchaseDate
-          }
-        });
-
-        // 4 save raw text
-        await tx.receiptImage.update({
-          where: { id: imageId },
-          data: {
-            ocrStatus: "done",
-            ocrRawText: parsedData.rawText,
-          }
-        });
-
-        // 5 build the expense items
-        for (const item of parsedData.items) {
-          const categoryName = item.suggestedCategory || 'Other';
-          let category = await tx.category.findFirst({
-            where: { name: categoryName }
-          });
-          if (!category) {
-            category = await tx.category.create({
-              data: {
-                name: categoryName,
-                colorHex: '#9CA3AF', //default gray
-                isSystem: false,
-                userId: receiptRecord.userId
+      this.logger.debug(`[Job ${job.id}] Fetching user context (categories and currency)...`);
+      const receipt = await this.prisma.receipt.findUnique({
+        where: { id: receiptId },
+        include: {
+          user: {
+            include: {
+              categories: {
+                select: { name: true }
               }
-            });
-          }
-          await tx.expenseItem.create({
-            data: {
-              receiptId: receiptId,
-              categoryId: category.id,
-              name: item.name,
-              amount: item.amount,
-              quantity: item.quantity || 1
             }
-          });
+          }
         }
       });
 
-      this.logger.log(`[Job ${job.id}] Completed successfully. Inserted ${parsedData.items.length} items for receipt: ${receiptId}`);
+      if (!receipt) {
+        throw new Error(`Receipt ${receiptId} not found`);
+      }
+
+      const context: ExtractionContext = {
+        availableCategories: receipt.user.categories.map(c => c.name),
+        userCurrencyDefault: receipt.user.currencyCode
+      };
+
+      this.logger.debug(`[Job ${job.id}] Passing ${imageBuffer.length} bytes to vision extraction...`);
+      const parsedData = await this.visionService.extractText(imageBuffer, context);
+
+      this.logger.debug(`[Job ${job.id}] Starting transactional DB persistence...`);
+      await this.persistenceService.saveExtractedData(receiptId, imageId, parsedData);
+
+      this.logger.log(`[Job ${job.id}] Completed successfully. Inserted items for receipt: ${receiptId}`);
 
     } catch (e) {
       const attemptsMade = job.attemptsMade;

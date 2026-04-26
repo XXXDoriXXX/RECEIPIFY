@@ -68,6 +68,7 @@ model Merchant {
   address        String?
   city           String?  @db.VarChar(100)
   countryCode    String?  @map("country_code") @db.Char(2)
+  taxId          String?  @map("tax_id") @db.VarChar(50)
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   receipts Receipt[]
@@ -81,8 +82,13 @@ model Receipt {
   userId       String        @map("user_id") @db.Uuid
   merchantId   String?       @map("merchant_id") @db.Uuid
   title        String?       @db.VarChar(200)
-  totalAmount  Decimal       @map("total_amount") @db.Decimal(12, 2)
-  currencyCode String        @default("USD") @map("currency_code") @db.Char(3)
+  totalAmount    Decimal       @map("total_amount") @db.Decimal(12, 2)
+  subtotalAmount Decimal?      @map("subtotal_amount") @db.Decimal(12, 2)
+  taxAmount      Decimal?      @map("tax_amount") @db.Decimal(12, 2)
+  discountAmount Decimal?      @map("discount_amount") @db.Decimal(12, 2)
+  paymentMethod  String?       @map("payment_method") @db.VarChar(50)
+  confidence     Float?        @db.Real
+  currencyCode   String        @default("USD") @map("currency_code") @db.Char(3)
   purchaseDate DateTime      @map("purchase_date") @db.Date
   status       ReceiptStatus @default(pending)
   source       ReceiptSource @default(photo)
@@ -145,7 +151,7 @@ model ExpenseItem {
   categoryId String   @map("category_id") @db.Uuid
   name       String   @db.VarChar(200)
   amount     Decimal  @db.Decimal(12, 2)
-  quantity   Int      @default(1)
+  quantity   Decimal  @default(1) @db.Decimal(12, 3)
   unit       String?  @db.VarChar(40)
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz

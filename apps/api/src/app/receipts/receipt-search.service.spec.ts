@@ -1,12 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ReceiptService } from './receipt.service';
-
+import { ReceiptSearchService } from './receipt-search.service';
 import { PrismaService } from '@src/prisma';
-import { StorageService } from '@src/storage';
-import { getQueueToken } from '@nestjs/bullmq';
 
-describe('ReceiptService', () => {
-  let service: ReceiptService;
+describe('ReceiptSearchService', () => {
+  let service: ReceiptSearchService;
   let prisma: PrismaService;
 
   const mockPrismaService = {
@@ -18,14 +15,12 @@ describe('ReceiptService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        ReceiptService,
+        ReceiptSearchService,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: StorageService, useValue: {} },
-        { provide: getQueueToken('ocr-jobs'), useValue: {} },
       ],
     }).compile();
 
-    service = module.get<ReceiptService>(ReceiptService);
+    service = module.get<ReceiptSearchService>(ReceiptSearchService);
     prisma = module.get<PrismaService>(PrismaService);
   });
 
@@ -37,7 +32,7 @@ describe('ReceiptService', () => {
 
     expect(mockPrismaService.receipt.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ userId: 'u1' }),
-      take: 3, // take + 1 to check next page
+      take: 3, 
       cursor: { id: '123-abc' },
       skip: 1,
       select: expect.not.objectContaining({ images: expect.objectContaining({ select: { ocrRawText: true } }) })

@@ -2,7 +2,14 @@
   "name": "@src/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio"
+  },
+  "prisma": {
+    "schema": "libs/infra/prisma/prisma/schema.prisma"
+  },
   "private": true,
   "dependencies": {
     "@google-cloud/vision": "^5.3.5",

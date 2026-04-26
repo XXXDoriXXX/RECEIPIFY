@@ -1,24 +1,53 @@
+// receipt-extraction.prompt.ts
+export interface ExtractionContext {
+  availableCategories: string[];
+  userCurrencyDefault: string;
+}
 
-export const RECEIPT_EXTRACTION_PROMPT = `
+export const buildReceiptExtractionPrompt = (ctx: ExtractionContext): string => `
 You are an expert financial data extraction AI.
 I will provide you with chaotic, raw OCR text from a scanned receipt.
-Your task is to extract the merchant details, receipt totals, and individual line items.
+Your task is to extract the merchant details, receipt totals, individual line items, and taxes.
 
 CRITICAL RULES:
-1. Respond ONLY with valid, minified JSON. Do not include markdown formatting like \`\`\`json.
-2. If a value is not found in the text, return null.
-3. currencyCode must be an ISO 4217 string (e.g., "USD", "EUR", "UAH").
-4. suggestedCategory MUST be one of the following: ["Groceries", "Electronics", "Restaurant", "Transport", "Other"].
-5. If the category is ambiguous or not in the list above, default to "Other" - DO NOT invent new categories.
-6. items array must contain every single purchased product.
-7. The sum of items.amount MUST closely match receipt.totalAmount.
+1. Respond ONLY with valid JSON.
+2. If a value is genuinely missing in the text, return null. Do not guess addresses or phone numbers.
+3. currencyCode should default to "${ctx.userCurrencyDefault}" if not explicitly found.
+4. suggestedCategory: choose the best fit from the user's available list: ${JSON.stringify(ctx.availableCategories)}.
+   If NONE of the existing categories logically fit the item, you SHOULD suggest a NEW, concise category name.
+5. Provide a "_confidenceScore" (0.0 to 1.0) for the overall extraction quality based on OCR legibility.
+6. The mathematical formula: (subtotal + taxAmount - discountAmount) SHOULD closely equal totalAmount.
+7. Be very precise with quantities and units. If an item is weighed (e.g. 0.206 kg), extract '0.206' as quantity and 'kg' as unit. Do not round fractional quantities.
 
 EXPECTED JSON SCHEMA:
 {
-  "merchant": { "name": "string", "address": "string | null", "city": "string | null", "country_code": "string | null" },
-  "receipt": { "totalAmount": number, "currencyCode": "string", "purchaseDate": "YYYY-MM-DD" },
+  "_reasoning": "Briefly explain any blurred text assumptions or math corrections here.",
+  "_confidenceScore": number,
+  "merchant": {
+    "name": "string",
+    "address": "string | null",
+    "city": "string | null",
+    "countryCode": "string | null",
+    "taxId": "string | null"
+  },
+  "receipt": {
+    "totalAmount": number,
+    "subtotalAmount": number | null,
+    "taxAmount": number | null,
+    "discountAmount": number | null,
+    "currencyCode": "string",
+    "purchaseDate": "YYYY-MM-DDTHH:mm:ssZ | YYYY-MM-DD",
+    "paymentMethod": "Cash | Card | Mobile | null"
+  },
   "items": [
-    { "name": "string", "amount": number, "quantity": number, "suggestedCategory": "Groceries | Electronics | Restaurant | Transport | Other" }
+    {
+      "name": "string",
+      "amount": number,
+      "quantity": number, (IMPORTANT: can be fractional like 0.206)
+      "unit": "string | null", (e.g. "kg", "pc", "l")
+      "unitPrice": number | null,
+      "suggestedCategory": "string"
+    }
   ]
 }
 `;

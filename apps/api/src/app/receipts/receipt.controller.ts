@@ -4,13 +4,15 @@ import {
   ParseFilePipe,
   Post,
   Get,
+  Param,
   Query,
   UploadedFile,
   UseGuards,
   UseInterceptors
 } from '@nestjs/common';
 import { JwtAuthGuard } from "@src/guards";
-import { ReceiptService } from "./receipt.service";
+import { ReceiptUploadService } from "./receipt-upload.service";
+import { ReceiptSearchService } from "./receipt-search.service";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { diskStorage } from "multer";
 import * as os from "os";
@@ -20,8 +22,10 @@ import { SearchReceiptsDto } from "@src/dto";
 @Controller('receipt')
 @UseGuards(JwtAuthGuard)
 export class ReceiptController {
-  constructor(private readonly receiptService: ReceiptService) {
-  }
+  constructor(
+    private readonly receiptUploadService: ReceiptUploadService,
+    private readonly receiptSearchService: ReceiptSearchService,
+  ) {}
   @Post('upload')
   @UseInterceptors(FileInterceptor('receiptImage', {
     storage: diskStorage({
@@ -48,7 +52,7 @@ export class ReceiptController {
           ],
         }),
     ) file: Express.Multer.File) {
-    return this.receiptService.processUpload(file, userid);
+    return this.receiptUploadService.processUpload(file, userid);
   }
 
   @Get()
@@ -56,6 +60,14 @@ export class ReceiptController {
     @CurrentUser('id') userid: string,
     @Query() params: SearchReceiptsDto
   ) {
-    return this.receiptService.searchReceipts(userid, params);
+    return this.receiptSearchService.searchReceipts(userid, params);
+  }
+
+  @Get(':id')
+  async getReceiptDetails(
+    @CurrentUser('id') userid: string,
+    @Param('id') id: string,
+  ) {
+    return this.receiptSearchService.getReceiptById(userid, id);
   }
 }

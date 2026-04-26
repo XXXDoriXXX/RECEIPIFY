@@ -24,9 +24,23 @@ services:
       - "6379:6379"
     networks:
       - backend-network
+  postgres:
+    image: postgres:15-alpine
+    container_name: receiptify-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: receiptify
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend-network
 networks:
   backend-network:
     driver: bridge
 volumes:
   minio_data:
-
+  postgres_data:
